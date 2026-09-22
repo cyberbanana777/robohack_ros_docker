@@ -1,1 +1,1 @@
-docker save unitree-hackathon:latest -o unitree-hackathon.tar
+sudo docker save unitree-hackathon:latest -o unitree-hackathon.tar
