@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematron="http://download.ros.org/schema/package_format3.xsd"?>
+<package format="3">
+  <name>unitree_camera_driver</name>
+  <version>0.1.0</version>
+  <description>
+    ROS 2 driver node for the Unitree USB/UVC stereo camera (UnitreeCameraSDK).
+    Publishes the left and right image streams as sensor_msgs/Image topics.
+  </description>
+  <maintainer email="you@example.com">your_name</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>image_transport</depend>
+  <depend>libopencv-dev</depend>
+  <depend>libudev-dev</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

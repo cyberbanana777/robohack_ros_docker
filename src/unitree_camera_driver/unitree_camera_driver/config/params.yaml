@@ -1,0 +1,9 @@
+unitree_camera_node:
+  ros__parameters:
+    device_node: 0          # /dev/video<N>
+    frame_width: 1856        # combined left+right width (SDK options: 1856x800 or 928x400)
+    frame_height: 800
+    fps: 30.0
+    frame_id: unitree_camera # published as "<frame_id>_left" / "<frame_id>_right"
+    config_file: ""          # optional: path to a stereo_camera_config.yaml, overrides width/height/fps
+    sdk_log_level: 1
