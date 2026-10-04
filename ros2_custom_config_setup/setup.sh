@@ -24,6 +24,9 @@ if [ -f /opt/cyclonedds_ws/install/setup.bash ]; then
     source /opt/cyclonedds_ws/install/setup.bash
 fi
 
+# цветные логи нод по уровню (WARN жёлтым, ERROR красным), в том числе в ros2 launch
+export RCUTILS_COLORIZED_OUTPUT=1
+
 # dds setup
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 # Конфиг CycloneDDS лежит рядом с этим файлом. Если его убрать, CycloneDDS

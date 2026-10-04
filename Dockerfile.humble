@@ -195,11 +195,59 @@ RUN if [ -d /opt/ros/humble/install/share/rmw_cyclonedds_cpp ]; then \
         rm -rf build log; \
     fi
 
-# === 5. Entrypoint ===
+# === 5. Удобный терминал ===
+# Отдельным шагом в конце, чтобы правки здесь не пересобирали OpenCV и CycloneDDS.
+# sudo — для пользователя ниже; bash-completion и python3-argcomplete —
+# автодополнение по Tab для bash, ros2 и colcon.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sudo bash-completion python3-argcomplete \
+    && rm -rf /var/lib/apt/lists/*
+
+# Подсветка синтаксиса и номера строк в nano — для всех пользователей сразу
+RUN echo 'include "/usr/share/nano/*.nanorc"' >> /etc/nanorc && \
+    echo 'set linenumbers' >> /etc/nanorc
+
+# === 6. Пользователь ===
+# Обычный пользователь с sudo без пароля, чтобы файлы, которые участники создают
+# в примонтированном src/, не были root-овыми на хосте Jetson. UID/GID по умолчанию 1000,
+# как у первого пользователя Jetson; меняются аргументами сборки (см. build_image.sh).
+# Группы video/dialout/plugdev — доступ к камерам (/dev/video*), последовательным портам
+# и USB-устройствам: контейнер запущен с privileged, но права на файлы в /dev
+# всё равно проверяются.
+# Если пользователь с таким UID уже есть в базовом образе, он просто переименовывается.
+ARG USERNAME=ros
+ARG USER_UID=1000
+ARG USER_GID=1000
+RUN if ! getent group ${USER_GID} > /dev/null; then \
+        groupadd --gid ${USER_GID} ${USERNAME}; \
+    fi && \
+    if getent passwd ${USER_UID} > /dev/null; then \
+        old_user=$(getent passwd ${USER_UID} | cut -d: -f1) && \
+        usermod -l ${USERNAME} -g ${USER_GID} -d /home/${USERNAME} -m -s /bin/bash "${old_user}"; \
+    else \
+        useradd --uid ${USER_UID} --gid ${USER_GID} -m -s /bin/bash ${USERNAME}; \
+    fi && \
+    for grp in video dialout plugdev; do \
+        if getent group ${grp} > /dev/null; then usermod -aG ${grp} ${USERNAME}; fi; \
+    done && \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} && \
+    chmod 0440 /etc/sudoers.d/${USERNAME} && \
+    chown -R ${USER_UID}:${USER_GID} /developer_ws && \
+    id ${USERNAME}
+
+# === 7. Entrypoint и bashrc ===
+# Всё содержимое настроек терминала лежит в ros2_custom_config_setup/bashrc.sh
+# на хосте (монтируется в контейнер), поэтому его можно менять без пересборки.
+# Здесь в ~/.bashrc root и пользователя добавляется только его подключение.
+# force_color_prompt — цветной prompt из стандартного .bashrc Ubuntu.
 COPY ros2_custom_config_setup/ros_entrypoint.sh /ros2_custom_entrypoint.sh
 RUN chmod +x /ros2_custom_entrypoint.sh && \
-    echo '[ -f /ros2_custom_config_setup/setup.sh ] && source /ros2_custom_config_setup/setup.sh' >> /root/.bashrc
+    for rc in /root/.bashrc /home/${USERNAME}/.bashrc; do \
+        sed -i 's/^#force_color_prompt=yes/force_color_prompt=yes/' "${rc}" && \
+        echo 'if [ -f /ros2_custom_config_setup/bashrc.sh ]; then source /ros2_custom_config_setup/bashrc.sh; fi' >> "${rc}"; \
+    done
+
+USER ${USERNAME}
 
 ENTRYPOINT ["/ros2_custom_entrypoint.sh"]
 CMD ["bash"]
-
