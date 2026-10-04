@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Загрузка образа из файла: ./load_image.sh foxy|humble
+# Сборка образа: ./build_image.sh foxy|humble
 set -euo pipefail
 cd "$(dirname "$0")"
 DISTRO="${1:-}"
@@ -7,4 +7,4 @@ case "${DISTRO}" in
   foxy|humble) ;;
   *) echo "Использование: $0 foxy|humble" >&2; exit 1 ;;
 esac
-sudo docker load -i "unitree-hackathon-${DISTRO}.tar"
+sudo docker build -f "Dockerfile.${DISTRO}" -t "unitree-hackathon:${DISTRO}" .

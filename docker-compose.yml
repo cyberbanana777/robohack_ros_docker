@@ -1,0 +1,40 @@
+# Два образа для хакатона: foxy и humble.
+# Каждый сервис в своём профиле, чтобы на Nano случайно не поднялись оба сразу.
+# Активный профиль задаётся в .env (COMPOSE_PROFILES=foxy), тогда работают обычные
+#   docker compose up -d / exec / down
+# Подробности в README.md.
+
+x-common: &common
+  network_mode: host          # ноды видят хост и сеть без проброса портов (DDS)
+  ipc: host
+  privileged: true            # доступ к камерам и USB; заодно снимает ограничения seccomp
+  stdin_open: true
+  tty: true
+  restart: unless-stopped     # контейнер сам поднимается после перезагрузки Jetson
+  volumes:
+    - /dev:/dev
+    - ./src:/developer_ws/src
+    - ./files_to_container:/files_to_container
+    - ./ros2_custom_config_setup:/ros2_custom_config_setup
+
+services:
+  foxy:
+    <<: *common
+    profiles: [foxy]
+    image: unitree-hackathon:foxy
+    container_name: hackathon-foxy
+    runtime: nvidia            # базовый образ jetson-containers, CUDA доступна
+    build:
+      context: .
+      dockerfile: Dockerfile.foxy
+
+  humble:
+    <<: *common
+    profiles: [humble]
+    image: unitree-hackathon:humble
+    container_name: hackathon-humble
+    runtime: nvidia            # базовый образ jetson-containers, CUDA доступна
+    build:
+      context: .
+      dockerfile: Dockerfile.humble
+

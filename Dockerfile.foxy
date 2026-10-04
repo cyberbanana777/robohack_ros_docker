@@ -1,3 +1,9 @@
+# ============================================================================
+#  Образ для хакатона: ROS2 Foxy + CycloneDDS 0.10.x + OpenCV 4.1.1 + UnitreeCameraSDK
+#  Jetson Nano, L4T 32.7.1 (JetPack 4.6.x), Ubuntu 18.04.
+#  Сборка: ./build_image.sh foxy   (или docker build -f Dockerfile.foxy -t unitree-hackathon:foxy .)
+# ============================================================================
+
 # === 1. Базовый образ ===
 # Готовый образ из jetson-containers (ветка legacy!), под L4T 32.7.1 (JetPack 4.6.x) —
 # это версия L4T оригинального Jetson Nano. Внутри уже есть ROS2 Foxy. OpenCV нужной
@@ -149,6 +155,42 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-colcon-common-extensions \
     neovim ranger mc \
     && rm -rf /var/lib/apt/lists/*
+
+# === 4а. CycloneDDS 0.10.x поверх Foxy ===
+# Штатный CycloneDDS в Foxy — версия 0.7: один сетевой интерфейс, старый синтаксис
+# конфига, нестабильно на больших сообщениях (видео). Собираем 0.10.x из исходников
+# по рецепту Unitree (unitree_ros2 для Go2): CycloneDDS из releases/0.10.x и
+# rmw_cyclonedds из ветки foxy. Та же версия CycloneDDS, что штатная в Humble,
+# поэтому оба образа и ноутбук говорят на одном DDS.
+#
+# Порядок важен: сам CycloneDDS собирается БЕЗ окружения ROS, а rmw_cyclonedds_cpp —
+# уже с подключённым Foxy. Результат лежит в /opt/cyclonedds_ws и подключается
+# в setup.sh поверх Foxy. Вместе с CycloneDDS собирается утилита ddsperf.
+#
+# CycloneDDS 0.10 требует CMake >= 3.16. Если в базовом образе CMake старее
+# (штатный в Ubuntu 18.04 — 3.10), ставим свежий через pip.
+RUN cmake_ver=$(cmake --version | head -n1 | awk '{print $3}') && \
+    echo "CMake в образе: ${cmake_ver}" && \
+    if [ "$(printf '%s\n' 3.16 "${cmake_ver}" | sort -V | head -n1)" != "3.16" ]; then \
+        apt-get update && apt-get install -y --no-install-recommends python3-pip && \
+        rm -rf /var/lib/apt/lists/* && \
+        python3 -m pip install -U "pip<22" && \
+        python3 -m pip install "cmake>=3.16,<3.28" && \
+        hash -r && echo "CMake обновлён: $(cmake --version | head -n1)"; \
+    fi
+
+RUN mkdir -p /opt/cyclonedds_ws/src && cd /opt/cyclonedds_ws/src && \
+    git clone --depth 1 -b releases/0.10.x https://github.com/eclipse-cyclonedds/cyclonedds && \
+    git clone --depth 1 -b foxy https://github.com/ros2/rmw_cyclonedds && \
+    cd /opt/cyclonedds_ws && \
+    colcon build --packages-select cyclonedds \
+        --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_DDSPERF=ON && \
+    bash -c "source /opt/ros/foxy/install/setup.bash && \
+             colcon build --packages-select rmw_cyclonedds_cpp \
+                 --cmake-args -DCMAKE_BUILD_TYPE=Release" && \
+    rm -rf build log && \
+    (ls /opt/cyclonedds_ws/install/cyclonedds/bin/ddsperf || \
+     echo "ВНИМАНИЕ: ddsperf не собрался, CycloneDDS при этом работает")
 
 # === 5. Entrypoint ===
 COPY ros2_custom_config_setup/ros_entrypoint.sh /ros2_custom_entrypoint.sh
