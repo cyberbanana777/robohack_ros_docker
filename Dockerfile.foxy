@@ -204,6 +204,49 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN echo 'include "/usr/share/nano/*.nanorc"' >> /etc/nanorc && \
     echo 'set linenumbers' >> /etc/nanorc
 
+# === 5а. Утилиты для отладки сети и DDS ===
+# Отдельным шагом, чтобы правки списка не пересобирали всё, что выше.
+#   iproute2, iputils-ping, net-tools, traceroute — интерфейсы, маршруты, связность
+#     (ip, ss, ping, ifconfig, netstat, traceroute)
+#   iw, wireless-tools, ethtool — состояние Wi-Fi (сигнал, скорость) и кабеля
+#   tcpdump — запись трафика DDS в .pcap для разбора в Wireshark на ноутбуке
+#   iperf3 — пропускная способность и потери UDP между Jetson и ноутбуком
+#   nload, iftop — живая загрузка интерфейсов (сколько реально уходит видео)
+#   netcat-openbsd, socat, dnsutils, curl — проверка отдельных портов и адресов
+#   lsof, psmisc (fuser), strace, htop — кто держит устройство или порт, что делает процесс
+#   libxml2-utils (xmllint) — проверка конфига CycloneDDS на ошибки в XML
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    iproute2 iputils-ping net-tools traceroute \
+    iw wireless-tools ethtool \
+    tcpdump iperf3 nload iftop \
+    netcat-openbsd socat dnsutils curl \
+    lsof psmisc strace htop \
+    libxml2-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# ddsperf — замеры пропускной способности и задержки на чистом DDS, без ROS.
+# В образе Foxy он уже собран вместе с CycloneDDS 0.10 в /opt/cyclonedds_ws.
+# Если в ROS-окружении его нет (бывает в Humble, где CycloneDDS из базового образа),
+# собираем отдельную копию CycloneDDS 0.10 только ради ddsperf в /opt/cyclonedds_tools,
+# не трогая CycloneDDS, с которым работает ROS. Обёртка в /usr/local/bin подставляет
+# свою библиотеку, чтобы ddsperf не зависел от LD_LIBRARY_PATH окружения ROS.
+RUN if bash -c "source /opt/ros/${ROS_DISTRO}/install/setup.bash && \
+                if [ -f /opt/cyclonedds_ws/install/setup.bash ]; then source /opt/cyclonedds_ws/install/setup.bash; fi && \
+                command -v ddsperf"; then \
+        echo "ddsperf уже есть в окружении ROS, отдельная сборка не нужна"; \
+    else \
+        echo "ddsperf нет, собираю CycloneDDS 0.10.x отдельно ради него" && \
+        git clone --depth 1 -b releases/0.10.x https://github.com/eclipse-cyclonedds/cyclonedds /tmp/cyclonedds && \
+        mkdir /tmp/cyclonedds/build && cd /tmp/cyclonedds/build && \
+        cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/cyclonedds_tools \
+              -DBUILD_DDSPERF=ON -DENABLE_SSL=NO -DENABLE_SECURITY=NO -DENABLE_SHM=NO .. && \
+        make -j$(nproc) install && \
+        cd / && rm -rf /tmp/cyclonedds && \
+        printf '#!/bin/sh\nLD_LIBRARY_PATH=/opt/cyclonedds_tools/lib exec /opt/cyclonedds_tools/bin/ddsperf "$@"\n' \
+            > /usr/local/bin/ddsperf && \
+        chmod 755 /usr/local/bin/ddsperf; \
+    fi
+
 # === 6. Пользователь ===
 # Обычный пользователь с sudo без пароля, чтобы файлы, которые участники создают
 # в примонтированном src/, не были root-овыми на хосте Jetson. UID/GID по умолчанию 1000,

@@ -20,6 +20,9 @@ if command -v register-python-argcomplete3 > /dev/null && command -v ros2 > /dev
     eval "$(register-python-argcomplete3 ros2)"
 fi
 
+# Диагностика сети и DDS одной командой
+alias dds-check='bash /ros2_custom_config_setup/dds_check.sh'
+
 # Метка в prompt, чтобы не перепутать контейнер с хостом Jetson:
 #   [docker:foxy] ros@jetson:/developer_ws$
 # (проверка нужна, чтобы метка не задваивалась при повторном source ~/.bashrc)
